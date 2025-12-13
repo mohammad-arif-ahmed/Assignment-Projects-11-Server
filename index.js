@@ -4,6 +4,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken'); // Will be used later for authentication
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config(); // Load environment variables from .env file
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -178,6 +179,98 @@ async function run() {
                 .toArray();
 
             res.send(result);
+        });
+        // 1. Create Payment Intent (Client Secret)
+        app.post('/create-payment-intent', verifyToken, async (req, res) => {
+            const { price } = req.body;
+            // Stripe works with cents/paisha, so convert price to integer cents
+            const amount = parseInt(price * 100);
+
+            // Safety check for amount
+            if (amount < 1) {
+                return res.status(400).send({ error: 'Payment amount must be greater than zero.' });
+            }
+
+            try {
+                const paymentIntent = await stripe.paymentIntents.create({
+                    amount: amount,
+                    currency: "usd", // Using USD as standard currency
+                    payment_method_types: ['card'] // Only accepting card payments
+                });
+
+                // Send client secret back to the client
+                res.send({
+                    clientSecret: paymentIntent.client_secret,
+                });
+
+            } catch (error) {
+                console.error("Stripe Error:", error.message);
+                res.status(500).send({ error: 'Failed to create payment intent.' });
+            }
+        });
+        // 2. Save Payment Information and Update Contest Participation
+        app.post('/payments', verifyToken, async (req, res) => {
+            const payment = req.body;
+
+            // 1. Save payment details
+            const paymentResult = await paymentsCollection.insertOne(payment);
+
+            // 2. Update Contest participation count
+            const contestId = payment.contestId;
+            const updateContestResult = await contestsCollection.updateOne(
+                { _id: new ObjectId(contestId) },
+                {
+                    $inc: { participationCount: 1 }, // Increment the participation count by 1
+                    // Optional: You might want to store participant details in the contest document itself later
+                }
+            );
+
+            // Optional: Add the user to a list of participants in the contest document
+            // const addParticipantToContest = await contestsCollection.updateOne(
+            //     { _id: new ObjectId(contestId) },
+            //     { $push: { participants: payment.email } } 
+            // );
+
+
+            res.send({ paymentResult, updateContestResult });
+        });
+        // --- User Dashboard APIs (Protected by User Role) ---
+
+        // 1. Get User's Participated Contests (My Participated Contests)
+        app.get('/participated-contests', verifyToken, async (req, res) => {
+            const userEmail = req.decoded.email;
+            const query = { email: userEmail }; // Query payments made by the user
+
+            // Get all successful payment records for the user
+            const paymentRecords = await paymentsCollection.find(query).toArray();
+
+            if (paymentRecords.length === 0) {
+                return res.send([]);
+            }
+
+            // Extract all unique contest IDs
+            const contestIds = paymentRecords.map(record => new ObjectId(record.contestId));
+
+            // Find the actual contests using the IDs
+            const contestsQuery = { _id: { $in: contestIds } };
+            const contests = await contestsCollection.find(contestsQuery).toArray();
+
+            // Merge payment info (e.g., transactionId, date) with contest details
+            const participatedContests = contests.map(contest => {
+                const paymentInfo = paymentRecords.find(p => p.contestId === contest._id.toString());
+                return {
+                    ...contest,
+                    transactionId: paymentInfo.transactionId,
+                    paidAmount: paymentInfo.price,
+                    paymentDate: paymentInfo.date,
+                    // Include status of the contest (for sorting by deadline/upcoming)
+                };
+            });
+
+            // Sort by upcoming deadline (assuming contest.deadline is a valid date string)
+            participatedContests.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+
+            res.send(participatedContests);
         });
         // --- Admin Contest Management APIs (Protected by Admin Role) ---
 
