@@ -36,6 +36,49 @@ async function run() {
         const contestsCollection = db.collection("contests");
         const paymentsCollection = db.collection("payments");
         const submissionsCollection = db.collection("submissions");
+        // 1. JWT Token Verification Middleware
+        const verifyToken = (req, res, next) => {
+            if (!req.headers.authorization) {
+                return res.status(401).send({ message: 'unauthorized access: No token provided' });
+            }
+            const token = req.headers.authorization.split(' ')[1];
+
+            jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+                if (err) {
+                    return res.status(401).send({ message: 'unauthorized access: Invalid token' });
+                }
+                req.decoded = decoded;
+                next();
+            });
+        };
+
+        // 2. Verify Admin Middleware (Requires verifyToken first)
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded.email;
+            const query = { email: email };
+            const user = await usersCollection.findOne(query);
+
+            const isAdmin = user?.role === 'Admin';
+
+            if (!isAdmin) {
+                return res.status(403).send({ message: 'forbidden access: Not an Admin' });
+            }
+            next();
+        };
+
+        // 3. Verify Creator Middleware (Requires verifyToken first)
+        const verifyCreator = async (req, res, next) => {
+            const email = req.decoded.email;
+            const query = { email: email };
+            const user = await usersCollection.findOne(query);
+
+            const isCreator = user?.role === 'Creator';
+
+            if (!isCreator) {
+                return res.status(403).send({ message: 'forbidden access: Not a Contest Creator' });
+            }
+            next();
+        };
 
         // =========================================================
         //                      API ENDPOINTS
@@ -55,37 +98,61 @@ async function run() {
             // Sending the token in the response
             res.send({ token });
         });
+        // --- JWT Logout API (New) ---
+        app.post('/logout', (req, res) => {
+            const user = req.body;
+            console.log('User logged out', user);
+            res.send({ success: true, message: "Logged out successfully" });
+        });
+
+        // --- User Role Check API (New Secured Routes) ---
+        app.get('/users/admin/:email', verifyToken, verifyAdmin, async (req, res) => {
+            const email = req.params.email;
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            res.send({ admin: true });
+        });
+
+        app.get('/users/creator/:email', verifyToken, verifyCreator, async (req, res) => {
+            const email = req.params.email;
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            res.send({ creator: true });
+        });
         // --- User Related APIs (Registration/Login) ---
-app.post('/users', async (req, res) => {
-    const user = req.body;
-    
-    // Check if the user already exists in the database
-    const query = { email: user.email };
-    const existingUser = await usersCollection.findOne(query);
+        app.post('/users', async (req, res) => {
+            const user = req.body;
 
-    if (existingUser) {
-        // If user exists, don't insert again, just confirm
-        return res.send({ message: 'User already exists', insertedId: null });
-    }
+            // Check if the user already exists in the database
+            const query = { email: user.email };
+            const existingUser = await usersCollection.findOne(query);
 
-    // Default role for new users is 'Normal User'
-    const userToInsert = { 
-        ...user, 
-        role: 'User', 
-        createdAt: new Date() 
-    };
+            if (existingUser) {
+                // If user exists, don't insert again, just confirm
+                return res.send({ message: 'User already exists', insertedId: null });
+            }
 
-    const result = await usersCollection.insertOne(userToInsert);
-    res.send(result);
-});
+            // Default role for new users is 'Normal User'
+            const userToInsert = {
+                ...user,
+                role: 'User',
+                createdAt: new Date()
+            };
 
-// --- API to get a single user's role (will be needed for dashboard access)
-app.get('/users/:email', async (req, res) => {
-    const email = req.params.email;
-    const query = { email: email };
-    const user = await usersCollection.findOne(query);
-    res.send(user);
-});
+            const result = await usersCollection.insertOne(userToInsert);
+            res.send(result);
+        });
+
+
+        // --- API to get a single user's role (will be needed for dashboard access)
+        app.get('/users/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email };
+            const user = await usersCollection.findOne(query);
+            res.send(user);
+        });
 
     } catch (error) {
         console.error("MongoDB Connection Error:", error);
