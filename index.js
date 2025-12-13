@@ -149,24 +149,82 @@ async function run() {
             const result = await contestsCollection.find(query).toArray();
             res.send(result);
         });
+        // --- Creator Edit Contest API (Pending Status check) ---
+        app.patch('/contests/creator/edit/:id', verifyToken, verifyCreator, async (req, res) => {
+            const id = req.params.id;
+            const updatedData = req.body;
+            const creatorEmail = req.decoded.email;
+
+            if (!ObjectId.isValid(id)) {
+                return res.status(400).send({ message: 'Invalid Contest ID' });
+            }
+
+            // Only allow update if status is 'Pending' AND the creator email matches
+            const filter = {
+                _id: new ObjectId(id),
+                creator: creatorEmail,
+                status: 'Pending' // Crucial check: only pending contests can be edited
+            };
+
+            // Prepare the update document
+            const updateDoc = {
+                $set: updatedData,
+            };
+
+            const result = await contestsCollection.updateOne(filter, updateDoc);
+
+            if (result.matchedCount === 0) {
+                return res.status(403).send({ message: 'Forbidden: Contest either Confirmed/Rejected or does not belong to this creator.' });
+            }
+            res.send(result);
+        });
+
+        // --- Creator Delete Contest API (Pending Status check) ---
+        app.delete('/contests/creator/:id', verifyToken, verifyCreator, async (req, res) => {
+            const id = req.params.id;
+            const creatorEmail = req.decoded.email;
+
+            if (!ObjectId.isValid(id)) {
+                return res.status(400).send({ message: 'Invalid Contest ID' });
+            }
+
+            // Only allow deletion if status is 'Pending' AND the creator email matches
+            const query = {
+                _id: new ObjectId(id),
+                creator: creatorEmail,
+                status: 'Pending' // Crucial check: only pending contests can be deleted
+            };
+
+            const result = await contestsCollection.deleteOne(query);
+
+            if (result.deletedCount === 0) {
+                return res.status(403).send({ message: 'Forbidden: Contest either Confirmed/Rejected or does not belong to this creator.' });
+            }
+            res.send(result);
+        });
 
 
         // --- Public Contest APIs (Commit 4) ---
 
-        // 3. Get Contest Details by ID (Accessible by everyone, but participation restricted)
-        app.get('/contests/:id', async (req, res) => {
-            const id = req.params.id;
-            if (!ObjectId.isValid(id)) {
-                return res.status(400).send({ message: 'Invalid Contest ID' });
-            }
-            const query = { _id: new ObjectId(id) };
+        app.get('/contests', async (req, res) => {
+            const { search, type } = req.query; // Get search and type queries
+            let query = { status: 'Accepted' }; // Base query: only show approved contests
 
-            const contest = await contestsCollection.findOne(query);
-
-            if (!contest) {
-                return res.status(404).send({ message: 'Contest not found' });
+            // 1. Filter by Contest Type (if provided)
+            if (type) {
+                // Assuming contestType field in DB stores the type name
+                query.contestType = type;
             }
-            res.send(contest);
+
+            // 2. Search by Contest Name (if provided)
+            if (search) {
+                // Use MongoDB $regex for case-insensitive partial matching
+                query.name = { $regex: search, $options: 'i' };
+            }
+
+            // Pagination will be added later (in Challenge Tasks)
+            const result = await contestsCollection.find(query).toArray();
+            res.send(result);
         });
 
         // 4. Get Popular Contests (Sorted by highest participation count)
@@ -272,6 +330,31 @@ async function run() {
 
             res.send(participatedContests);
         });
+        // --- User Profile Update API ---
+        app.patch('/users/profile/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            const updateFields = req.body;
+
+            // Security check: Ensure token email matches the requested email
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+
+            // Filter by email
+            const filter = { email: email };
+
+            // Update Document: Only set fields that are passed in the request body
+            const updateDoc = {
+                $set: updateFields,
+            };
+
+            const result = await usersCollection.updateOne(filter, updateDoc);
+
+            if (result.matchedCount === 0) {
+                return res.status(404).send({ message: 'User not found' });
+            }
+            res.send(result);
+        });
         // --- Admin Contest Management APIs (Protected by Admin Role) ---
 
         // 1. Get All Contests (including Pending/Rejected) for Admin Dashboard
@@ -342,6 +425,7 @@ async function run() {
             const result = await usersCollection.insertOne(userToInsert);
             res.send(result);
         });
+
 
 
         // --- API to get a single user's role (will be needed for dashboard access)
