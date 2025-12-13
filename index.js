@@ -179,6 +179,53 @@ async function run() {
 
             res.send(result);
         });
+        // --- Admin Contest Management APIs (Protected by Admin Role) ---
+
+        // 1. Get All Contests (including Pending/Rejected) for Admin Dashboard
+        app.get('/contests/admin', verifyToken, verifyAdmin, async (req, res) => {
+            // Admin needs to see all contests regardless of status
+            const result = await contestsCollection.find().toArray();
+            res.send(result);
+        });
+        // 2. Update Contest Status (Approve/Reject)
+        app.patch('/contests/status/:id', verifyToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const { status } = req.body; // status will be 'Accepted' or 'Rejected'
+
+            if (!ObjectId.isValid(id)) {
+                return res.status(400).send({ message: 'Invalid Contest ID' });
+            }
+
+            const filter = { _id: new ObjectId(id) };
+            const updateDoc = {
+                $set: {
+                    status: status
+                },
+            };
+
+            const result = await contestsCollection.updateOne(filter, updateDoc);
+
+            if (result.matchedCount === 0) {
+                return res.status(404).send({ message: 'Contest not found' });
+            }
+            res.send(result);
+        });
+        // 3. Delete a Contest by ID
+        app.delete('/contests/:id', verifyToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+
+            if (!ObjectId.isValid(id)) {
+                return res.status(400).send({ message: 'Invalid Contest ID' });
+            }
+
+            const query = { _id: new ObjectId(id) };
+            const result = await contestsCollection.deleteOne(query);
+
+            if (result.deletedCount === 0) {
+                return res.status(404).send({ message: 'Contest not found' });
+            }
+            res.send(result);
+        });
         // --- User Related APIs (Registration/Login) ---
         app.post('/users', async (req, res) => {
             const user = req.body;
