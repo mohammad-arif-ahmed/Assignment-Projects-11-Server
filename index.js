@@ -121,6 +121,64 @@ async function run() {
             }
             res.send({ creator: true });
         });
+        // --- Contest Creator APIs (Commit 4) ---
+
+        // 1. Add a New Contest (Protected by Creator Role)
+        app.post('/contests', verifyToken, verifyCreator, async (req, res) => {
+            const contest = req.body;
+
+            // Set default status to 'Pending' upon creation
+            const contestToInsert = {
+                ...contest,
+                status: 'Pending',
+                participationCount: 0, // Initial count
+                creator: req.decoded.email, // Store creator's email for verification/management
+                createdAt: new Date(),
+            };
+
+            const result = await contestsCollection.insertOne(contestToInsert);
+            res.send(result);
+        });
+
+        // 2. Get All Contests created by the current Creator
+        app.get('/contests/creator', verifyToken, verifyCreator, async (req, res) => {
+            const creatorEmail = req.decoded.email;
+            const query = { creator: creatorEmail };
+
+            const result = await contestsCollection.find(query).toArray();
+            res.send(result);
+        });
+
+
+        // --- Public Contest APIs (Commit 4) ---
+
+        // 3. Get Contest Details by ID (Accessible by everyone, but participation restricted)
+        app.get('/contests/:id', async (req, res) => {
+            const id = req.params.id;
+            if (!ObjectId.isValid(id)) {
+                return res.status(400).send({ message: 'Invalid Contest ID' });
+            }
+            const query = { _id: new ObjectId(id) };
+
+            const contest = await contestsCollection.findOne(query);
+
+            if (!contest) {
+                return res.status(404).send({ message: 'Contest not found' });
+            }
+            res.send(contest);
+        });
+
+        // 4. Get Popular Contests (Sorted by highest participation count)
+        app.get('/popular-contests', async (req, res) => {
+            // Only fetch Accepted contests and sort by participationCount descending
+            const query = { status: 'Accepted' };
+            const result = await contestsCollection.find(query)
+                .sort({ participationCount: -1 }) // Sort descending
+                .limit(5) // Show only 5 contests as required
+                .toArray();
+
+            res.send(result);
+        });
         // --- User Related APIs (Registration/Login) ---
         app.post('/users', async (req, res) => {
             const user = req.body;
