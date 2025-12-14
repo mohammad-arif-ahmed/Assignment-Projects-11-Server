@@ -330,6 +330,30 @@ async function run() {
 
             res.send(participatedContests);
         });
+        app.patch('/users/profile/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            const updateFields = req.body;
+
+            // Security check: Ensure token email matches the requested email
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+
+            // Filter by email
+            const filter = { email: email };
+
+            // Update Document: Only set fields that are passed in the request body
+            const updateDoc = {
+                $set: updateFields,
+            };
+
+            const result = await usersCollection.updateOne(filter, updateDoc);
+
+            if (result.matchedCount === 0) {
+                return res.status(404).send({ message: 'User not found' });
+            }
+            res.send(result);
+        });
         // --- User Profile Update API ---
         app.patch('/users/profile/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
@@ -355,7 +379,143 @@ async function run() {
             }
             res.send(result);
         });
-        // --- Admin Contest Management APIs (Protected by Admin Role) ---
+        // --- Submission APIs (Commit 8: Protected by User Role) ---
+
+        // 1. Submit a Contest Entry
+        app.post('/submissions', verifyToken, async (req, res) => {
+            const submission = req.body;
+            const userEmail = req.decoded.email;
+            const contestId = submission.contestId;
+
+            // Basic Validation: Check if the user has paid for the contest
+            const hasPaid = await paymentsCollection.findOne({
+                email: userEmail,
+                contestId: contestId
+            });
+
+            if (!hasPaid) {
+                return res.status(403).send({ message: 'Forbidden: You must pay to participate in this contest.' });
+            }
+
+            // Check if the user has already submitted for this contest
+            const alreadySubmitted = await submissionsCollection.findOne({
+                contestId: contestId,
+                participantEmail: userEmail
+            });
+
+            if (alreadySubmitted) {
+                return res.status(400).send({ message: 'Bad Request: You have already submitted an entry for this contest.' });
+            }
+
+            // Prepare submission document
+            const submissionToInsert = {
+                ...submission,
+                participantEmail: userEmail,
+                submissionDate: new Date(),
+                // Add default status like 'Pending Review' or just rely on existence
+            };
+
+            const result = await submissionsCollection.insertOne(submissionToInsert);
+            res.send(result);
+        });
+
+        // --- Creator/Submission Management APIs (Commit 8) ---
+
+        // 2. Get all Submissions for a specific contest (Protected by Creator Role)
+        app.get('/submissions/contest/:contestId', verifyToken, verifyCreator, async (req, res) => {
+            const contestId = req.params.contestId;
+            const creatorEmail = req.decoded.email;
+
+            if (!ObjectId.isValid(contestId)) {
+                return res.status(400).send({ message: 'Invalid Contest ID' });
+            }
+
+            // 1. Check if the current Creator owns this contest
+            const contest = await contestsCollection.findOne({
+                _id: new ObjectId(contestId),
+                creator: creatorEmail
+            });
+
+            if (!contest) {
+                return res.status(403).send({ message: 'Forbidden: You are not the creator of this contest.' });
+            }
+
+            // 2. Fetch all submissions for that contest
+            const query = { contestId: contestId };
+            const submissions = await submissionsCollection.find(query).toArray();
+
+            res.send(submissions);
+        });
+
+        // 3. Declare Winner for a Contest (Protected by Creator Role)
+        app.patch('/contests/winner/:contestId', verifyToken, verifyCreator, async (req, res) => {
+            const contestId = req.params.contestId;
+            const { winnerEmail, winnerName, winnerImage } = req.body;
+            const creatorEmail = req.decoded.email;
+
+            if (!ObjectId.isValid(contestId)) {
+                return res.status(400).send({ message: 'Invalid Contest ID' });
+            }
+
+            // 1. Check if the current Creator owns this contest
+            const contest = await contestsCollection.findOne({
+                _id: new ObjectId(contestId),
+                creator: creatorEmail
+            });
+
+            if (!contest) {
+                return res.status(403).send({ message: 'Forbidden: You are not the creator of this contest.' });
+            }
+
+            // 2. Check if the winner email actually participated in the contest (optional but good practice)
+            const isParticipant = await submissionsCollection.findOne({
+                contestId: contestId,
+                participantEmail: winnerEmail
+            });
+
+            if (!isParticipant) {
+                console.warn(`Warning: Declaring winner (${winnerEmail}) who did not submit to contest ${contestId}`);
+            }
+
+            // 3. Update the contest document to include winner details
+            const filter = { _id: new ObjectId(contestId) };
+            const updateDoc = {
+                $set: {
+                    winner: {
+                        email: winnerEmail,
+                        name: winnerName,
+                        image: winnerImage,
+                        declarationDate: new Date(),
+                    },
+                    status: 'Completed' // Mark contest as completed
+                },
+            };
+
+            const result = await contestsCollection.updateOne(filter, updateDoc);
+
+            if (result.matchedCount === 0) {
+                return res.status(404).send({ message: 'Contest not found' });
+            }
+
+            res.send(result);
+        });
+
+        // --- Public APIs (Contests with Winners) (Commit 8) ---
+
+        // 4. Get all contests where a winner has been declared (Publicly accessible)
+        app.get('/contests/winners', async (req, res) => {
+            // Query contests that have a 'winner' field set, and status is 'Completed'
+            const query = { winner: { $exists: true }, status: 'Completed' };
+
+            // Sort by latest declaration date
+            const result = await contestsCollection.find(query)
+                .sort({ 'winner.declarationDate': -1 })
+                .toArray();
+
+            res.send(result);
+        });
+
+        // <--- COMMIT 8 APIs END HERE --->
 
         // 1. Get All Contests (including Pending/Rejected) for Admin Dashboard
         app.get('/contests/admin', verifyToken, verifyAdmin, async (req, res) => {
