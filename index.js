@@ -330,30 +330,7 @@ async function run() {
 
             res.send(participatedContests);
         });
-        app.patch('/users/profile/:email', verifyToken, async (req, res) => {
-            const email = req.params.email;
-            const updateFields = req.body;
 
-            // Security check: Ensure token email matches the requested email
-            if (email !== req.decoded.email) {
-                return res.status(403).send({ message: 'forbidden access' });
-            }
-
-            // Filter by email
-            const filter = { email: email };
-
-            // Update Document: Only set fields that are passed in the request body
-            const updateDoc = {
-                $set: updateFields,
-            };
-
-            const result = await usersCollection.updateOne(filter, updateDoc);
-
-            if (result.matchedCount === 0) {
-                return res.status(404).send({ message: 'User not found' });
-            }
-            res.send(result);
-        });
         // --- User Profile Update API ---
         app.patch('/users/profile/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
@@ -512,6 +489,75 @@ async function run() {
                 .sort({ 'winner.declarationDate': -1 })
                 .toArray();
 
+            res.send(result);
+        });
+        app.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
+            // 1. Total Users Count
+            const totalUsers = await usersCollection.estimatedDocumentCount();
+
+            // 2. Total Contests Count (All statuses)
+            const totalContests = await contestsCollection.estimatedDocumentCount();
+
+            // 3. Total Payments/Revenue (Calculate total price from payments collection)
+            const totalRevenueResult = await paymentsCollection.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalRevenue: { $sum: '$price' } // Assuming 'price' is the payment amount
+                    }
+                }
+            ]).toArray();
+
+            const totalRevenue = totalRevenueResult.length > 0 ? totalRevenueResult[0].totalRevenue : 0;
+
+
+            // 4. Total Contests Participated (Sum of participationCount from contests)
+            const totalParticipationsResult = await contestsCollection.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalParticipations: { $sum: '$participationCount' }
+                    }
+                }
+            ]).toArray();
+
+            const totalParticipations = totalParticipationsResult.length > 0 ? totalParticipationsResult[0].totalParticipations : 0;
+
+            res.send({
+                totalUsers,
+                totalContests,
+                totalRevenue,
+                totalParticipations,
+            });
+        });
+
+        // --- Admin Get All Users API ---
+        app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
+            const result = await usersCollection.find().toArray();
+            res.send(result);
+        });
+
+        // --- Admin Update User Role API (Make Creator/Admin) ---
+        app.patch('/users/role/:id', verifyToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const { role } = req.body; // role can be 'Creator' or 'Admin'
+
+            if (!ObjectId.isValid(id)) {
+                return res.status(400).send({ message: 'Invalid User ID' });
+            }
+
+            const filter = { _id: new ObjectId(id) };
+            const updateDoc = {
+                $set: {
+                    role: role
+                },
+            };
+
+            const result = await usersCollection.updateOne(filter, updateDoc);
+
+            if (result.matchedCount === 0) {
+                return res.status(404).send({ message: 'User not found' });
+            }
             res.send(result);
         });
 
