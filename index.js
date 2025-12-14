@@ -207,24 +207,35 @@ async function run() {
         // --- Public Contest APIs (Commit 4) ---
 
         app.get('/contests', async (req, res) => {
-            const { search, type } = req.query; // Get search and type queries
+            const { search, type, page, size } = req.query;
             let query = { status: 'Accepted' }; // Base query: only show approved contests
+
+            // Handle Pagination
+            const pageNum = parseInt(page) || 0; // Current page number (default 0)
+            const pageSize = parseInt(size) || 10; // Number of items per page (default 10)
+            const skip = pageNum * pageSize; // Calculate skip amount 
 
             // 1. Filter by Contest Type (if provided)
             if (type) {
-                // Assuming contestType field in DB stores the type name
                 query.contestType = type;
             }
 
             // 2. Search by Contest Name (if provided)
             if (search) {
-                // Use MongoDB $regex for case-insensitive partial matching
                 query.name = { $regex: search, $options: 'i' };
             }
 
-            // Pagination will be added later (in Challenge Tasks)
-            const result = await contestsCollection.find(query).toArray();
-            res.send(result);
+            // Fetch contests with pagination and filtering
+            const result = await contestsCollection.find(query)
+                .skip(skip)
+                .limit(pageSize)
+                .toArray();
+
+            // Get the total number of matching contests (for total page calculation on client side)
+            const count = await contestsCollection.countDocuments(query);
+
+            // Sending both contest data and the total count
+            res.send({ contests: result, count });
         });
 
         // 4. Get Popular Contests (Sorted by highest participation count)
@@ -533,8 +544,24 @@ async function run() {
 
         // --- Admin Get All Users API ---
         app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
-            const result = await usersCollection.find().toArray();
-            res.send(result);
+            const { page, size } = req.query;
+
+            // Handle Pagination
+            const pageNum = parseInt(page) || 0;
+            const pageSize = parseInt(size) || 10;
+            const skip = pageNum * pageSize;
+
+            // Fetch users with pagination
+            const result = await usersCollection.find()
+                .skip(skip)
+                .limit(pageSize)
+                .toArray();
+
+            // Get total count
+            const count = await usersCollection.estimatedDocumentCount();
+
+            // Sending both user data and the total count
+            res.send({ users: result, count });
         });
 
         // --- Admin Update User Role API (Make Creator/Admin) ---
