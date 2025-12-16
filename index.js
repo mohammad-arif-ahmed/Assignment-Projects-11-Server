@@ -169,6 +169,7 @@ async function run() {
 
             const result = await contestsCollection.find(query).toArray();
             res.send(result);
+            console.log('Fetching contests for:', req.decoded.email);
         });
         // --- Creator Edit Contest API (Pending Status check) ---
         app.patch('/contests/creator/edit/:id', verifyToken, verifyCreator, async (req, res) => {
@@ -280,6 +281,59 @@ async function run() {
             } catch (error) {
                 console.error('Error fetching user role:', error);
                 res.status(500).send({ message: 'Internal server error' });
+            }
+        });
+
+        app.get('/contests/pending', verifyToken, verifyAdmin, async (req, res) => {
+            try {
+                // শুধুমাত্র Pending স্ট্যাটাস সহ কন্টেস্টগুলো খুঁজে বের করা
+                const pendingContests = await contestsCollection.find({ status: 'Pending' }).toArray();
+                res.send(pendingContests);
+            } catch (error) {
+                console.error('Error fetching pending contests:', error);
+                res.status(500).send({ message: 'Failed to fetch pending contests' });
+            }
+        });
+        app.get('/contests/creator', verifyToken, async (req, res) => {
+            try {
+                const creatorEmail = req.decoded.email; // verifyToken থেকে আসা ইউজারের ইমেল
+
+                // creator ফিল্ডে লগইন করা ইউজারের ইমেল আছে এমন কন্টেস্ট খুঁজে বের করা
+                const myContests = await contestsCollection.find({ creator: creatorEmail }).toArray();
+
+                res.send(myContests);
+            } catch (error) {
+                console.error('Error fetching creator contests:', error);
+                res.status(500).send({ message: 'Failed to fetch created contests' });
+            }
+        });
+        app.patch('/contests/:id/status', verifyToken, verifyAdmin, async (req, res) => {
+            try {
+                // ObjectId ব্যবহার করার জন্য, নিশ্চিত করুন index.js-এর শুরুতে এটি ইমপোর্ট করা আছে:
+                // const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+
+                const id = req.params.id;
+                const { status } = req.body;
+
+                // শুধু 'Accepted' বা 'Rejected' স্ট্যাটাস গ্রহণ করা হবে
+                if (!['Accepted', 'Rejected'].includes(status)) {
+                    return res.status(400).send({ message: 'Invalid status provided.' });
+                }
+
+                const result = await contestsCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { status: status } }
+                );
+
+                if (result.matchedCount === 0) {
+                    return res.status(404).send({ message: 'Contest not found.' });
+                }
+
+                res.send({ acknowledged: true, modifiedCount: result.modifiedCount });
+
+            } catch (error) {
+                console.error('Error updating contest status:', error);
+                res.status(500).send({ message: 'Failed to update contest status' });
             }
         });
 
