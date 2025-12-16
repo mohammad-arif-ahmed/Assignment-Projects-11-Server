@@ -270,6 +270,51 @@ async function run() {
 
             res.send(result);
         });
+        app.get('/creators/best', async (req, res) => {
+            try {
+                // 1. Group contests by creator and sum the participationCount
+                const topCreators = await contestsCollection.aggregate([
+                    // Filter: Only consider Accepted/Approved contests (assuming 'Accepted' is your approved status)
+                    { $match: { status: 'Accepted' } },
+
+                    {
+                        $group: {
+                            _id: "$creator", // Group by creator email
+                            totalParticipation: { $sum: "$participationCount" }, // Sum up all participation counts for this creator
+                            contestsCount: { $sum: 1 } // Count how many contests they have created
+                        }
+                    },
+                    { $sort: { totalParticipation: -1 } }, // Sort by total participation descending
+                    { $limit: 3 } // Take the top 3 creators
+                ]).toArray();
+
+                // 2. Extract creator emails
+                const creatorEmails = topCreators.map(creator => creator._id);
+
+                // 3. Find user profiles (name, image) from usersCollection
+                const creatorProfiles = await usersCollection.find({
+                    email: { $in: creatorEmails }
+                }).toArray();
+
+                // 4. Merge participation data with user profiles
+                const bestCreators = topCreators.map(creator => {
+                    const profile = creatorProfiles.find(p => p.email === creator._id);
+                    return {
+                        creatorEmail: creator._id,
+                        totalParticipation: creator.totalParticipation,
+                        contestsCount: creator.contestsCount,
+                        name: profile?.name || 'Unknown Creator', // Use profile name or fallback
+                        image: profile?.image || 'https://via.placeholder.com/150' // Use profile image or fallback
+                    };
+                });
+
+                res.send(bestCreators);
+
+            } catch (error) {
+                console.error('Error fetching best creators:', error);
+                res.status(500).send({ message: 'Failed to fetch best creators' });
+            }
+        });
         // 1. Create Payment Intent (Client Secret)
         app.post('/create-payment-intent', verifyToken, async (req, res) => {
             const { price } = req.body;
