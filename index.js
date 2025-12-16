@@ -10,8 +10,12 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors()); // Enable CORS for client-server communication
-app.use(express.json()); // Enable parsing of JSON body
+app.use(cors({
+    // 🔑 IMPORTANT: Allow your client URL
+    origin: ['http://localhost:5173'],
+    credentials: true, // This allows cookies/headers like JWT to be sent
+}));
+app.use(express.json());
 
 // 1. Construct the MongoDB Connection URI using environment variables
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.nkerzi4.mongodb.net/?appName=Cluster0`;
@@ -24,6 +28,10 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
+let usersCollection;
+let contestsCollection;
+let paymentsCollection;
+let submissionsCollection;
 
 async function run() {
     try {
@@ -33,10 +41,10 @@ async function run() {
 
         // 4. Define Database and Collections
         const db = client.db("contestHubDB");
-        const usersCollection = db.collection("users");
-        const contestsCollection = db.collection("contests");
-        const paymentsCollection = db.collection("payments");
-        const submissionsCollection = db.collection("submissions");
+        usersCollection = db.collection("users");
+        contestsCollection = db.collection("contests");
+        paymentsCollection = db.collection("payments");
+        submissionsCollection = db.collection("submissions");
         // 1. JWT Token Verification Middleware
         const verifyToken = (req, res, next) => {
             if (!req.headers.authorization) {
@@ -84,7 +92,20 @@ async function run() {
         // =========================================================
         //                      API ENDPOINTS
         // =========================================================
+        app.get('/contests/popular', async (req, res) => {
+            try {
+                const result = await contestCollection
+                    .find({ status: 'approved' })
+                    .sort({ participantsCount: -1 })
+                    .limit(4)
+                    .toArray();
 
+                res.send(result);
+            } catch (error) {
+                console.error('Error fetching popular contests:', error);
+                res.status(500).send({ message: 'Failed to fetch popular contests' });
+            }
+        });
         // Basic Test Route
         app.get('/test', (req, res) => {
             res.send({ message: 'ContestHub API Test Endpoint is working!' });
