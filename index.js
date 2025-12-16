@@ -258,6 +258,30 @@ async function run() {
             // Sending both contest data and the total count
             res.send({ contests: result, count });
         });
+        app.get('/users/role/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            const requesterEmail = req.decoded.email; // verifyToken থেকে আসা ইমেল
+
+            // নিরাপত্তা যাচাই: রিকোয়েস্টকারী ইউজার সেই ইউজারই কিনা যার রোল চাওয়া হচ্ছে
+            if (email !== requesterEmail) {
+                return res.status(403).send({ message: 'Forbidden access' });
+            }
+
+            try {
+                const user = await usersCollection.findOne({ email: email });
+
+                if (user) {
+                    // যদি user থাকে, তবে তার role রিটার্ন করা
+                    res.send({ role: user.role || 'Participant' });
+                } else {
+                    // যদি user না থাকে, তবে ডিফল্ট role 'Participant'
+                    res.status(404).send({ role: 'Participant', message: 'User not found' });
+                }
+            } catch (error) {
+                console.error('Error fetching user role:', error);
+                res.status(500).send({ message: 'Internal server error' });
+            }
+        });
 
         // 4. Get Popular Contests (Sorted by highest participation count)
         app.get('/popular-contests', async (req, res) => {
