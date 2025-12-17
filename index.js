@@ -550,6 +550,22 @@ async function run() {
 
             res.send(participatedContests);
         });
+        app.get('/my-participated-contests/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            if (email !== req.decoded.email) return res.status(403).send({ message: 'forbidden' });
+
+            // পেমেন্ট কালেকশন থেকে ওই ইউজারের কেনা কন্টেস্টগুলো আনা
+            const result = await paymentsCollection.find({ email: email }).toArray();
+            res.send(result);
+        });
+
+        // 📌 API 15: User Profile Stats (For My Profile Page)
+        app.get('/user-stats/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            const wins = await submissionsCollection.countDocuments({ participantEmail: email, status: 'Winner' });
+            const participation = await paymentsCollection.countDocuments({ email: email });
+            res.send({ wins, participation });
+        });
 
         // --- User Profile Update API ---
         app.patch('/users/profile/:email', verifyToken, async (req, res) => {
@@ -575,6 +591,56 @@ async function run() {
                 return res.status(404).send({ message: 'User not found' });
             }
             res.send(result);
+        });
+        app.get('/submissions/creator', verifyToken, async (req, res) => {
+            try {
+                const creatorEmail = req.decoded.email; // লগইন করা ক্রিয়েটরের ইমেইল
+
+                // ১. প্রথমে ক্রিয়েটরের সব কন্টেস্টের আইডি খুঁজে বের করা
+                const myContests = await contestsCollection
+                    .find({ creator: creatorEmail })
+                    .project({ _id: 1, name: 1 }) // শুধু আইডি এবং নাম নিচ্ছি
+                    .toArray();
+
+                const contestIds = myContests.map(c => c._id.toString());
+
+                // ২. ওই আইডিগুলোর বিপরীতে যত সাবমিশন আছে তা খুঁজে বের করা
+                // নোট: আপনার সাবমিশন কালেকশনের নাম 'submissionsCollection' ধরে নিচ্ছি
+                const submissions = await submissionsCollection
+                    .find({ contestId: { $in: contestIds } })
+                    .toArray();
+
+                res.send(submissions);
+            } catch (error) {
+                res.status(500).send({ message: "Failed to fetch submissions" });
+            }
+        });
+        app.patch('/submissions/declare-winner/:id', verifyToken, async (req, res) => {
+            try {
+                const submissionId = req.params.id;
+                const { contestId, participantEmail, participantName, participantImage } = req.body;
+
+                // ১. সাবমিশনটি আপডেট করা (Winner হিসেবে মার্ক করা)
+                const subFilter = { _id: new ObjectId(submissionId) };
+                const subUpdate = { $set: { status: 'Winner' } };
+                await submissionsCollection.updateOne(subFilter, subUpdate);
+
+                // ২. কন্টেস্টটি আপডেট করা (বিজয়ীর তথ্য সেট করা)
+                const contestFilter = { _id: new ObjectId(contestId) };
+                const contestUpdate = {
+                    $set: {
+                        winnerName: participantName,
+                        winnerEmail: participantEmail,
+                        winnerImage: participantImage,
+                        isClosed: true // কন্টেস্টটি বন্ধ হয়ে গেল
+                    }
+                };
+                const result = await contestsCollection.updateOne(contestFilter, contestUpdate);
+
+                res.send(result);
+            } catch (error) {
+                res.status(500).send({ message: "Failed to declare winner" });
+            }
         });
         // --- Submission APIs (Commit 8: Protected by User Role) ---
 
