@@ -171,6 +171,41 @@ async function run() {
             res.send(result);
             console.log('Fetching contests for:', req.decoded.email);
         });
+        app.delete('/contests/:id', verifyToken, async (req, res) => { // 🔑 মেথড অবশ্যই .delete হবে
+            try {
+                const id = req.params.id;
+                const requesterEmail = req.decoded.email;
+
+                // আইডি ভ্যালিড কিনা চেক করা
+                if (!ObjectId.isValid(id)) {
+                    return res.status(400).send({ message: 'Invalid ID format' });
+                }
+
+                const query = { _id: new ObjectId(id) };
+                const contest = await contestsCollection.findOne(query);
+
+                if (!contest) {
+                    return res.status(404).send({ message: 'Contest not found' });
+                }
+
+                // ক্রিয়েটর ভেরিফিকেশন
+                if (contest.creator !== requesterEmail) {
+                    return res.status(403).send({ message: 'Unauthorized access' });
+                }
+
+                // Accepted কন্টেস্ট ডিলিট করতে বাধা দেওয়া
+                if (contest.status === 'Accepted') {
+                    return res.status(400).send({ message: 'Cannot delete an accepted contest' });
+                }
+
+                const result = await contestsCollection.deleteOne(query);
+                res.send(result);
+
+            } catch (error) {
+                console.error('Delete Error:', error);
+                res.status(500).send({ message: 'Failed to delete contest' });
+            }
+        });
         // --- Creator Edit Contest API (Pending Status check) ---
         app.patch('/contests/creator/edit/:id', verifyToken, verifyCreator, async (req, res) => {
             const id = req.params.id;
