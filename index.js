@@ -259,6 +259,36 @@ async function run() {
             }
             res.send(result);
         });
+        app.get('/contests/single/:id', verifyToken, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await contestsCollection.findOne(query);
+            res.send(result);
+        });
+
+        // 📌 API 11: Update a Contest (PUT/PATCH)
+        app.patch('/contests/update/:id', verifyToken, async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) };
+            const updatedContest = req.body;
+
+            // কন্টেস্টের তথ্য আপডেট করা
+            const updateDoc = {
+                $set: {
+                    name: updatedContest.name,
+                    image: updatedContest.image,
+                    description: updatedContest.description,
+                    price: updatedContest.price,
+                    prizeMoney: updatedContest.prizeMoney,
+                    contestType: updatedContest.contestType,
+                    deadline: updatedContest.deadline,
+                    status: 'Pending' // এডিট করলে স্ট্যাটাস আবার 'Pending' হয়ে যাবে যাতে অ্যাডমিন আবার চেক করতে পারে
+                },
+            };
+
+            const result = await contestsCollection.updateOne(filter, updateDoc);
+            res.send(result);
+        });
 
 
         // --- Public Contest APIs (Commit 4) ---
