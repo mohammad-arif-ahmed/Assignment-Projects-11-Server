@@ -11,9 +11,11 @@ const port = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors({
-    // 🔑 IMPORTANT: Allow your client URL
-    origin: ['http://localhost:5173'],
-    credentials: true, // This allows cookies/headers like JWT to be sent
+  origin: [
+    'http://localhost:5173', // লোকাল ডেভেলপমেন্টের জন্য
+    'https://sage-blini-9c8298.netlify.app/' 
+  ],
+  credentials: true
 }));
 app.use(express.json());
 
@@ -84,7 +86,9 @@ async function run() {
             const isCreator = user?.role === 'Creator';
 
             if (!isCreator) {
-                return res.status(403).send({ message: 'forbidden access: Not a Contest Creator' });
+                return res.status(403).send({ message: 'forbidden access: Not a Contest Creator'
+                    
+                 });
             }
             next();
         };
@@ -94,8 +98,8 @@ async function run() {
         // =========================================================
         app.get('/contests/popular', async (req, res) => {
             try {
-                const result = await contestCollection
-                    .find({ status: 'approved' })
+                const result = await contestsCollection.find({ status: 'approved' })
+
                     .sort({ participantsCount: -1 })
                     .limit(4)
                     .toArray();
@@ -289,6 +293,7 @@ async function run() {
             const result = await contestsCollection.updateOne(filter, updateDoc);
             res.send(result);
         });
+
 
 
         // --- Public Contest APIs (Commit 4) ---
@@ -486,31 +491,71 @@ async function run() {
                 res.status(500).send({ error: 'Failed to create payment intent.' });
             }
         });
+        app.get('/all-contests', verifyToken, verifyAdmin, async (req, res) => {
+            const result = await contestsCollection.find().toArray();
+            res.send(result);
+        });
+        // 📌 API 18: Get all users (Admin only)
+        app.get('/users', verifyToken, async (req, res) => {
+            const result = await usersCollection.find().toArray();
+            res.send(result);
+        });
+
+        // 📌 API 19: Change User Role (Make Admin/Creator)
+        app.patch('/users/role/:id', verifyToken, async (req, res) => {
+            const id = req.params.id;
+            const { role } = req.body;
+            const filter = { _id: new ObjectId(id) };
+            const updateDoc = { $set: { role: role } };
+            const result = await usersCollection.updateOne(filter, updateDoc);
+            res.send(result);
+        });
+
+        // 📌 API 20: Approve/Reject Contest
+        app.patch('/contests/status/:id', verifyToken, async (req, res) => {
+            const id = req.params.id;
+            const { status } = req.body;
+            const filter = { _id: new ObjectId(id) };
+            const updateDoc = { $set: { status: status } };
+            const result = await contestsCollection.updateOne(filter, updateDoc);
+            res.send(result);
+        });
+
+        // 📌 API 16: Create Payment Intent
+        app.post("/create-payment-intent", verifyToken, async (req, res) => {
+            const { price } = req.body;
+            const amount = parseInt(price * 100); // সেন্টে রূপান্তর
+
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: ["card"],
+            });
+
+            res.send({
+                clientSecret: paymentIntent.client_secret,
+            });
+        });
         // 2. Save Payment Information and Update Contest Participation
         app.post('/payments', verifyToken, async (req, res) => {
             const payment = req.body;
 
-            // 1. Save payment details
-            const paymentResult = await paymentsCollection.insertOne(payment);
+            // বর্তমান তারিখ যোগ করা (এটি রিপোর্টে কাজে লাগবে)
+            const paymentWithDate = {
+                ...payment,
+                date: new Date()
+            };
 
-            // 2. Update Contest participation count
-            const contestId = payment.contestId;
-            const updateContestResult = await contestsCollection.updateOne(
-                { _id: new ObjectId(contestId) },
-                {
-                    $inc: { participationCount: 1 }, // Increment the participation count by 1
-                    // Optional: You might want to store participant details in the contest document itself later
-                }
-            );
+            const paymentResult = await paymentsCollection.insertOne(paymentWithDate);
 
-            // Optional: Add the user to a list of participants in the contest document
-            // const addParticipantToContest = await contestsCollection.updateOne(
-            //     { _id: new ObjectId(contestId) },
-            //     { $push: { participants: payment.email } } 
-            // );
+            // কন্টেস্টের পার্টিসিপেন্ট সংখ্যা বাড়ানো
+            const filter = { _id: new ObjectId(payment.contestId) };
+            const updateDoc = {
+                $inc: { participationCount: 1 }
+            };
+            await contestsCollection.updateOne(filter, updateDoc);
 
-
-            res.send({ paymentResult, updateContestResult });
+            res.send(paymentResult);
         });
         // --- User Dashboard APIs (Protected by User Role) ---
 
@@ -556,6 +601,16 @@ async function run() {
 
             // পেমেন্ট কালেকশন থেকে ওই ইউজারের কেনা কন্টেস্টগুলো আনা
             const result = await paymentsCollection.find({ email: email }).toArray();
+            res.send(result);
+        });
+        // ইউজার কোন কোন কন্টেস্টে টাকা দিয়েছে তা দেখা
+        app.get('/my-participated/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: 'forbidden' });
+            }
+            const query = { email: email };
+            const result = await paymentsCollection.find(query).toArray();
             res.send(result);
         });
 
@@ -962,3 +1017,4 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
     console.log(`ContestHub Server is running on port ${port}`);
 });
+module.exports = app;
