@@ -2,9 +2,11 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const usersRoutes = require("./routes/usersRoutes");
+const verifyJWT = require("./middleware/verifyJWT");
 
 dotenv.config();
 
@@ -57,8 +59,35 @@ async function run() {
     app.get("/", (req, res) => {
       res.send("ContestHub Server Running");
     });
-// users route
+    // users route
     app.use("/users", usersRoutes(usersCollection));
+    // jwt api
+    app.post("/jwt", async (req, res) => {
+
+      const user = req.body;
+
+      const token = jwt.sign(user, process.env.JWT_SECRET, {
+        expiresIn: "7d",
+      });
+
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: false,
+          sameSite: "strict",
+        })
+        .send({ success: true });
+
+    });
+    // private route test
+    app.get("/private", verifyJWT, async (req, res) => {
+
+      res.send({
+        success: true,
+        user: req.decoded,
+      });
+
+    });
     console.log("MongoDB Connected Successfully");
   } finally {
   }
