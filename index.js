@@ -4,6 +4,7 @@ const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
 
 const { MongoClient, ServerApiVersion } = require("mongodb");
+const usersRoutes = require("./routes/usersRoutes");
 
 dotenv.config();
 
@@ -56,7 +57,8 @@ async function run() {
     app.get("/", (req, res) => {
       res.send("ContestHub Server Running");
     });
-
+// users route
+    app.use("/users", usersRoutes(usersCollection));
     console.log("MongoDB Connected Successfully");
   } finally {
   }
