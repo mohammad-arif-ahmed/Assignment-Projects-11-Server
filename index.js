@@ -7,6 +7,8 @@ const jwt = require("jsonwebtoken");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const usersRoutes = require("./routes/usersRoutes");
 const verifyJWT = require("./middleware/verifyJWT");
+const verifyAdmin = require("./middleware/verifyAdmin");
+const verifyCreator = require("./middleware/verifyCreator");
 
 dotenv.config();
 
@@ -61,6 +63,40 @@ async function run() {
     });
     // users route
     app.use("/users", usersRoutes(usersCollection));
+    // attach usersCollection
+    app.use((req, res, next) => {
+
+      req.usersCollection = usersCollection;
+
+      next();
+
+    });
+    // admin test route
+    app.get(
+      "/admin-route",
+      verifyJWT,
+      verifyAdmin,
+      async (req, res) => {
+
+        res.send({
+          message: "Welcome Admin",
+        });
+
+      }
+    );
+    // creator test route
+    app.get(
+      "/creator-route",
+      verifyJWT,
+      verifyCreator,
+      async (req, res) => {
+
+        res.send({
+          message: "Welcome Creator",
+        });
+
+      }
+    );
     // jwt api
     app.post("/jwt", async (req, res) => {
 
