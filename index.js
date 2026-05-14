@@ -6,6 +6,7 @@ const jwt = require("jsonwebtoken");
 
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const usersRoutes = require("./routes/usersRoutes");
+const contestsRoutes = require("./routes/contestsRoutes");
 const verifyJWT = require("./middleware/verifyJWT");
 const verifyAdmin = require("./middleware/verifyAdmin");
 const verifyCreator = require("./middleware/verifyCreator");
@@ -71,6 +72,14 @@ async function run() {
       next();
 
     });
+    app.use(
+      "/contests",
+      contestsRoutes(
+        contestsCollection,
+        verifyJWT,
+        verifyCreator
+      )
+    );
     // admin test route
     app.get(
       "/admin-route",
