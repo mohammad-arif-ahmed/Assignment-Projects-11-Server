@@ -8,6 +8,7 @@ const { MongoClient, ServerApiVersion } = require("mongodb");
 const usersRoutes = require("./routes/usersRoutes");
 const contestsRoutes = require("./routes/contestsRoutes");
 const paymentsRoutes = require("./routes/paymentsRoutes");
+const submissionsRoutes = require("./routes/submissionsRoutes");
 const verifyJWT = require("./middleware/verifyJWT");
 const verifyAdmin = require("./middleware/verifyAdmin");
 const verifyCreator = require("./middleware/verifyCreator");
@@ -87,6 +88,15 @@ async function run() {
         paymentsCollection,
         contestsCollection,
         verifyJWT
+      )
+    );
+    app.use(
+      "/submissions",
+      submissionsRoutes(
+        submissionsCollection,
+        contestsCollection,
+        verifyJWT,
+        verifyCreator
       )
     );
     // admin test route
