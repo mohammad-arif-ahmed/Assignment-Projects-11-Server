@@ -143,8 +143,8 @@ async function run() {
       res
         .cookie("token", token, {
           httpOnly: true,
-          secure: false,
-          sameSite: "strict",
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "none",
         })
         .send({ success: true });
 
