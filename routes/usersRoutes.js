@@ -1,35 +1,43 @@
 const express = require("express");
+const { ObjectId } = require("mongodb");
 
 const router = express.Router();
 
-const usersRoutes = (usersCollection) => {
+const usersRoutes = (
+  usersCollection,
+  verifyJWT,
+  verifyAdmin
+) => {
 
-  // save user to database
+  // save user
   router.post("/", async (req, res) => {
+
     try {
 
       const user = req.body;
 
-      // check if user already exists
-      const query = { email: user.email };
+      const query = {
+        email: user.email,
+      };
 
-      const existingUser = await usersCollection.findOne(query);
+      const existingUser =
+        await usersCollection.findOne(query);
 
       if (existingUser) {
+
         return res.send({
           message: "User already exists",
           inserted: false,
         });
+
       }
 
-      // default role
       user.role = "user";
 
-      // save created time
       user.createdAt = new Date();
 
-      // insert user
-      const result = await usersCollection.insertOne(user);
+      const result =
+        await usersCollection.insertOne(user);
 
       res.send(result);
 
@@ -40,9 +48,77 @@ const usersRoutes = (usersCollection) => {
       });
 
     }
+
   });
 
+  // get all users
+  router.get(
+    "/",
+    verifyJWT,
+    verifyAdmin,
+    async (req, res) => {
+
+      const result =
+        await usersCollection
+          .find()
+          .toArray();
+
+      res.send(result);
+
+    }
+  );
+
+  // update role
+  router.patch(
+    "/role/:id",
+    verifyJWT,
+    verifyAdmin,
+    async (req, res) => {
+
+      const id = req.params.id;
+
+      const role = req.body.role;
+
+      const query = {
+        _id: new ObjectId(id),
+      };
+
+      const updateDoc = {
+        $set: {
+          role,
+        },
+      };
+
+      const result =
+        await usersCollection.updateOne(
+          query,
+          updateDoc
+        );
+
+      res.send(result);
+
+    }
+  );
+
+  // leaderboard
+  router.get(
+    "/leaderboard",
+    async (req, res) => {
+
+      const result =
+        await usersCollection
+          .find()
+          .sort({ wins: -1 })
+          .limit(10)
+          .toArray();
+
+      res.send(result);
+
+    }
+  );
+
   return router;
+
 };
 
 module.exports = usersRoutes;

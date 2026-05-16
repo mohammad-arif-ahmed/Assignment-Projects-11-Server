@@ -65,8 +65,14 @@ async function run() {
       res.send("ContestHub Server Running");
     });
     // users route
-    app.use("/users", usersRoutes(usersCollection));
-    // attach usersCollection
+    app.use(
+      "/users",
+      usersRoutes(
+        usersCollection,
+        verifyJWT,
+        verifyAdmin
+      )
+    );    // attach usersCollection
     app.use((req, res, next) => {
 
       req.usersCollection = usersCollection;

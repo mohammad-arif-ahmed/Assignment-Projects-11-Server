@@ -26,7 +26,8 @@ const contestsRoutes = (
 
         contest.createdAt = new Date();
 
-        const result = await contestsCollection.insertOne(contest);
+        const result =
+          await contestsCollection.insertOne(contest);
 
         res.send(result);
 
@@ -41,53 +42,37 @@ const contestsRoutes = (
     }
   );
 
-  // get all approved contests
+  // get all contests with pagination
   router.get("/", async (req, res) => {
 
     try {
 
+      const page = parseInt(req.query.page) || 1;
+
+      const limit = 10;
+
+      const skip = (page - 1) * limit;
+
       const query = {
         status: "approved",
       };
 
-      const result = await contestsCollection
-        .find(query)
-        .sort({ createdAt: -1 })
-        .toArray();
+      const contests =
+        await contestsCollection
+          .find(query)
+          .skip(skip)
+          .limit(limit)
+          .toArray();
 
-      res.send(result);
+      const total =
+        await contestsCollection.countDocuments(query);
 
-    } catch (error) {
-
-      res.status(500).send({
-        message: error.message,
+      res.send({
+        contests,
+        total,
+        currentPage: page,
+        totalPages: Math.ceil(total / limit),
       });
-
-    }
-
-  });
-
-  // search contests
-  router.get("/search/type", async (req, res) => {
-
-    try {
-
-      const type = req.query.type;
-
-      const query = {
-        contestType: {
-          $regex: type,
-          $options: "i",
-        },
-
-        status: "approved",
-      };
-
-      const result = await contestsCollection
-        .find(query)
-        .toArray();
-
-      res.send(result);
 
     } catch (error) {
 
@@ -100,51 +85,22 @@ const contestsRoutes = (
   });
 
   // popular contests
-  router.get("/popular/contests", async (req, res) => {
-
-    try {
-
-      const query = {
-        status: "approved",
-      };
-
-      const result = await contestsCollection
-        .find(query)
-        .sort({ participantsCount: -1 })
-        .limit(5)
-        .toArray();
-
-      res.send(result);
-
-    } catch (error) {
-
-      res.status(500).send({
-        message: error.message,
-      });
-
-    }
-
-  });
-
-  // my created contests
   router.get(
-    "/creator/my-contests",
-    verifyJWT,
-    verifyCreator,
+    "/popular",
     async (req, res) => {
 
       try {
 
-        const email = req.query.email;
-
-        const query = {
-          creatorEmail: email,
-        };
-
-        const result = await contestsCollection
-          .find(query)
-          .sort({ createdAt: -1 })
-          .toArray();
+        const result =
+          await contestsCollection
+            .find({
+              status: "approved",
+            })
+            .sort({
+              participantsCount: -1,
+            })
+            .limit(5)
+            .toArray();
 
         res.send(result);
 
@@ -159,36 +115,44 @@ const contestsRoutes = (
     }
   );
 
-  // get single contest
-  router.get("/:id", async (req, res) => {
+  // search contests by type
+  router.get(
+    "/search/type",
+    async (req, res) => {
 
-    try {
+      try {
 
-      const id = req.params.id;
+        const type = req.query.type;
 
-      const query = {
-        _id: new ObjectId(id),
-      };
+        const query = {
+          contestType: {
+            $regex: type,
+            $options: "i",
+          },
+          status: "approved",
+        };
 
-      const result = await contestsCollection.findOne(query);
+        const result =
+          await contestsCollection
+            .find(query)
+            .toArray();
 
-      res.send(result);
+        res.send(result);
 
-    } catch (error) {
+      } catch (error) {
 
-      res.status(500).send({
-        message: error.message,
-      });
+        res.status(500).send({
+          message: error.message,
+        });
+
+      }
 
     }
+  );
 
-  });
-
-  // delete contest
-  router.delete(
+  // contest details
+  router.get(
     "/:id",
-    verifyJWT,
-    verifyCreator,
     async (req, res) => {
 
       try {
@@ -199,7 +163,41 @@ const contestsRoutes = (
           _id: new ObjectId(id),
         };
 
-        const result = await contestsCollection.deleteOne(query);
+        const result =
+          await contestsCollection.findOne(query);
+
+        res.send(result);
+
+      } catch (error) {
+
+        res.status(500).send({
+          message: error.message,
+        });
+
+      }
+
+    }
+  );
+
+  // creator contests
+  router.get(
+    "/creator/email",
+    verifyJWT,
+    verifyCreator,
+    async (req, res) => {
+
+      try {
+
+        const email = req.query.email;
+
+        const query = {
+          creatorEmail: email,
+        };
+
+        const result =
+          await contestsCollection
+            .find(query)
+            .toArray();
 
         res.send(result);
 
@@ -215,7 +213,7 @@ const contestsRoutes = (
   );
 
   // update contest
-  router.put(
+  router.patch(
     "/:id",
     verifyJWT,
     verifyCreator,
@@ -235,10 +233,42 @@ const contestsRoutes = (
           $set: updatedContest,
         };
 
-        const result = await contestsCollection.updateOne(
-          query,
-          updateDoc
-        );
+        const result =
+          await contestsCollection.updateOne(
+            query,
+            updateDoc
+          );
+
+        res.send(result);
+
+      } catch (error) {
+
+        res.status(500).send({
+          message: error.message,
+        });
+
+      }
+
+    }
+  );
+
+  // delete contest
+  router.delete(
+    "/:id",
+    verifyJWT,
+    verifyCreator,
+    async (req, res) => {
+
+      try {
+
+        const id = req.params.id;
+
+        const query = {
+          _id: new ObjectId(id),
+        };
+
+        const result =
+          await contestsCollection.deleteOne(query);
 
         res.send(result);
 
@@ -254,6 +284,7 @@ const contestsRoutes = (
   );
 
   return router;
+
 };
 
 module.exports = contestsRoutes;
