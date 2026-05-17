@@ -83,6 +83,21 @@ const contestsRoutes = (
     }
 
   });
+  // popular contests
+  router.get(
+    "/popular",
+    async (req, res) => {
+
+      const result = await contestsCollection
+        .find({ status: "approved" })
+        .sort({ participantsCount: -1 })
+        .limit(6)
+        .toArray();
+
+      res.send(result);
+
+    }
+  );
 
   // popular contests
   router.get(
