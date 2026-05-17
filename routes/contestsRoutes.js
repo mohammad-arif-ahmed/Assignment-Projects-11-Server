@@ -164,6 +164,30 @@ const contestsRoutes = (
 
     }
   );
+  // get all approved contests
+  router.get(
+    "/approved/all",
+    async (req, res) => {
+
+      try {
+
+        const result =
+          await contestsCollection
+            .find({ status: "approved" })
+            .toArray();
+
+        res.send(result);
+
+      } catch (error) {
+
+        res.status(500).send({
+          message: error.message,
+        });
+
+      }
+
+    }
+  );
 
   // contest details
   router.get(
