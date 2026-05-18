@@ -85,7 +85,8 @@ async function run() {
       contestsRoutes(
         contestsCollection,
         verifyJWT,
-        verifyCreator
+        verifyCreator,
+        verifyAdmin
       )
     );
     app.use(

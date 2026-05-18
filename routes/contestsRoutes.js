@@ -6,7 +6,8 @@ const router = express.Router();
 const contestsRoutes = (
   contestsCollection,
   verifyJWT,
-  verifyCreator
+  verifyCreator,
+  verifyAdmin
 ) => {
 
   // add contest
@@ -193,6 +194,75 @@ const contestsRoutes = (
             .find(query)
             .sort({ createdAt: -1 })
             .toArray();
+
+        res.send(result);
+
+      } catch (error) {
+
+        res.status(500).send({
+          message: error.message,
+        });
+
+      }
+
+    }
+  );
+  // admin manage contests
+  router.get(
+    "/admin/all",
+    verifyJWT,
+    verifyAdmin,
+    async (req, res) => {
+
+      try {
+
+        const result =
+          await contestsCollection
+            .find()
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.send(result);
+
+      } catch (error) {
+
+        res.status(500).send({
+          message: error.message,
+        });
+
+      }
+
+    }
+  );
+
+  // update contest status
+  router.patch(
+    "/status/:id",
+    verifyJWT,
+    verifyAdmin,
+    async (req, res) => {
+
+      try {
+
+        const id = req.params.id;
+
+        const status = req.body.status;
+
+        const query = {
+          _id: new ObjectId(id),
+        };
+
+        const updateDoc = {
+          $set: {
+            status,
+          },
+        };
+
+        const result =
+          await contestsCollection.updateOne(
+            query,
+            updateDoc
+          );
 
         res.send(result);
 
