@@ -276,6 +276,37 @@ const contestsRoutes = (
 
     }
   );
+  // my winning contests
+  router.get(
+    "/winning/:email",
+    verifyJWT,
+    async (req, res) => {
+
+      try {
+
+        const email = req.params.email;
+
+        const query = {
+          winnerEmail: email,
+        };
+
+        const result =
+          await contestsCollection
+            .find(query)
+            .toArray();
+
+        res.send(result);
+
+      } catch (error) {
+
+        res.status(500).send({
+          message: error.message,
+        });
+
+      }
+
+    }
+  );
 
   // contest details
   router.get(
