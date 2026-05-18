@@ -6,6 +6,7 @@ const router = express.Router();
 const submissionsRoutes = (
   submissionsCollection,
   contestsCollection,
+  usersCollection,
   verifyJWT,
   verifyCreator
 ) => {
@@ -107,6 +108,19 @@ const submissionsRoutes = (
         const result = await contestsCollection.updateOne(
           contestQuery,
           updateDoc
+        );
+        // increase winner count
+        await usersCollection.updateOne(
+
+          {
+            email: submission.participantEmail,
+          },
+
+          {
+            $inc: {
+              wins: 1,
+            },
+          }
         );
 
         res.send(result);

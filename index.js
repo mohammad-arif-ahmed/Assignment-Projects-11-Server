@@ -102,6 +102,7 @@ async function run() {
       submissionsRoutes(
         submissionsCollection,
         contestsCollection,
+        usersCollection,
         verifyJWT,
         verifyCreator
       )
