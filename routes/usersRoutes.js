@@ -67,6 +67,37 @@ const usersRoutes = (
 
     }
   );
+  // get user role
+  router.get(
+    "/role/:email",
+    verifyJWT,
+    async (req, res) => {
+
+      try {
+
+        const email = req.params.email;
+
+        const query = {
+          email,
+        };
+
+        const user =
+          await usersCollection.findOne(query);
+
+        res.send({
+          role: user?.role,
+        });
+
+      } catch (error) {
+
+        res.status(500).send({
+          message: error.message,
+        });
+
+      }
+
+    }
+  );
 
   // update role
   router.patch(
