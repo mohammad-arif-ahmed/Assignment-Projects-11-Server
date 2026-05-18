@@ -83,21 +83,6 @@ const contestsRoutes = (
     }
 
   });
-  // popular contests
-  router.get(
-    "/popular",
-    async (req, res) => {
-
-      const result = await contestsCollection
-        .find({ status: "approved" })
-        .sort({ participantsCount: -1 })
-        .limit(6)
-        .toArray();
-
-      res.send(result);
-
-    }
-  );
 
   // popular contests
   router.get(
@@ -188,6 +173,39 @@ const contestsRoutes = (
 
     }
   );
+  // creator contests
+  router.get(
+    "/creator/:email",
+    verifyJWT,
+    verifyCreator,
+    async (req, res) => {
+
+      try {
+
+        const email = req.params.email;
+
+        const query = {
+          creatorEmail: email,
+        };
+
+        const result =
+          await contestsCollection
+            .find(query)
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.send(result);
+
+      } catch (error) {
+
+        res.status(500).send({
+          message: error.message,
+        });
+
+      }
+
+    }
+  );
 
   // contest details
   router.get(
@@ -204,39 +222,6 @@ const contestsRoutes = (
 
         const result =
           await contestsCollection.findOne(query);
-
-        res.send(result);
-
-      } catch (error) {
-
-        res.status(500).send({
-          message: error.message,
-        });
-
-      }
-
-    }
-  );
-
-  // creator contests
-  router.get(
-    "/creator/email",
-    verifyJWT,
-    verifyCreator,
-    async (req, res) => {
-
-      try {
-
-        const email = req.query.email;
-
-        const query = {
-          creatorEmail: email,
-        };
-
-        const result =
-          await contestsCollection
-            .find(query)
-            .toArray();
 
         res.send(result);
 
